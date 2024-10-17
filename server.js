@@ -113,13 +113,13 @@ app.get('/validate', (req, res) => {
 // Маршрут для подгрузки сообщений
 app.get('/messages', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store'); // Отключаем кэширование
-  const limit = 10; // Количество сообщений на загрузку
+  const limit = 30; // Количество сообщений на загрузку
   const offset = parseInt(req.query.offset) || 0; // Смещение для пагинации
 
   console.log(`Offset: ${offset}, Limit: ${limit}`); // Логируем значения
 
   try {
-    const rows = await db.all("SELECT user, message, timestamp FROM messages ORDER BY id ASC LIMIT ? OFFSET ?", [limit, offset]);
+    const rows = await db.all("SELECT user, message, timestamp FROM messages ORDER BY id DESC LIMIT ? OFFSET ?", [limit, offset]);
     console.log('Загруженные сообщения:', rows.length); // Логируем количество загруженных сообщений
     res.json({ messages: rows });
   } catch (err) {

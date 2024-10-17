@@ -49,23 +49,26 @@ function App() {
       .then(data => {
         console.log('Ответ с сервера:', data); // Логируем ответ сервера
         if (data.messages && data.messages.length > 0) {
-          console.log('Загруженные сообщения:', data.messages);
+          //console.log('Загруженные сообщения:', data.messages);
+
           setMessages(prevMessages => {
             const updatedMessages = isInitialLoad
-              ? [...prevMessages, ...data.messages] // Для начальной загрузки
-              : [...data.messages, ...prevMessages]; // Для подгрузки старых сообщений
-            
-            console.log('Обновленные сообщения:', updatedMessages);
-            return updatedMessages;
+              ? [...data.messages, ...prevMessages.reverse()] // Начальная загрузка: новые сообщения добавляем в конец
+              : [...prevMessages.reverse(), ...data.messages]; // Подгрузка старых сообщений: добавляем их в начало
+              console.log('Обновлённые сообщения:', updatedMessages);
+            return updatedMessages.reverse();
           });
 
           setOffset(prevOffset => prevOffset + data.messages.length);
 
+          if (!isInitialLoad) {
           // После добавления сообщений восстанавливаем скролл
-        setTimeout(() => {
-          const newScrollHeight = chatWindow.scrollHeight;
-          chatWindow.scrollTop = newScrollHeight - currentScrollHeight + currentScrollTop; // Корректируем положение скролла
-        }, 0);
+            setTimeout(() => {
+              const newScrollHeight = chatWindow.scrollHeight;
+              chatWindow.scrollTop = newScrollHeight - currentScrollHeight + currentScrollTop; // Корректируем положение скролла
+            }, 10);
+          }
+
         // После загрузки восстанавливаем положение скролла
         // setTimeout(() => {
         //   chatWindow.scrollTop = savedScrollTop; // Восстанавливаем scrollTop
@@ -91,7 +94,7 @@ function App() {
       .then(user => {
         setLogin(user.login);
         setIsAuthenticated(true);
-        loadMessages(true); // Загружаем начальные сообщения после авторизации
+        //loadMessages(true); // Загружаем начальные сообщения после авторизации
       })
       .catch(() => setIsAuthenticated(false));
 
@@ -106,7 +109,7 @@ function App() {
       const data = JSON.parse(event.data);
       console.log('Message received:', data); // Логируем каждое входящее сообщение
 
-      if (data.type === 'newMessage' && messages.length > 0) { // Проверка, что старые сообщения уже загружены
+      if (data.type === 'newMessage') { // Проверка, что старые сообщения уже загружены
         const decryptedMessage = decryptMessage(data.message, 'your-secret-key');
         setMessages(prevMessages => [
           ...prevMessages, // Сохраняем старые сообщения
@@ -115,10 +118,11 @@ function App() {
 
         // Прокручиваем чат вниз после обновления сообщений
         // setTimeout(() => {
-        //   if (chatWindowRef.current) {
-        //     chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
+        //   const chatWindow = chatWindowRef.current;
+        //   if (chatWindow) {
+        //     chatWindow.scrollTop = chatWindow.scrollHeight; // Прокрутка вниз при получении нового сообщения
         //   }
-        // }, 100); // Задержка, чтобы дать React время обновить DOM
+        // }, 100); // Даем время для обновления DOM
       }
     };
 
@@ -136,15 +140,16 @@ function App() {
       }
     };
   }
-  }, [messages]);
+  }, [loadMessages, messages]);
 
   // Загрузка сообщений после полной инициализации интерфейса
   useEffect(() => {
     // Запрос к серверу для загрузки сообщений только после рендеринга
     setTimeout(() => {
       loadMessages(true);
-    }, 100); // Задержка, чтобы дать компоненту полностью отрендериться
+    }, 1000); // Задержка, чтобы дать компоненту полностью отрендериться
   }, []);
+  
   // useEffect(() => {
   //   // Загружаем сообщения сразу после полной инициализации компонента
   //   if (chatWindowRef.current) {
@@ -171,7 +176,7 @@ function App() {
     .then(response => {
       if (response.ok) {
         setIsAuthenticated(true);
-        loadMessages(true);
+        //loadMessages(true);
       } else {
         alert('Login failed');
       }
@@ -217,11 +222,22 @@ function App() {
   };
 
   useEffect(() => {
+    const chatWindow = chatWindowRef.current;
+    if (chatWindow) {
+      // Прокрутка вниз после добавления нового сообщения
+      setTimeout(() => {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+      }, 0); // Даем время для обновления DOM
+    }
+  }, [messages]); // Срабатывает каждый раз, когда изменяются сообщения
+  
+
+  useEffect(() => {
     const handleScroll = () => {
       const chatWindow = chatWindowRef.current;
   
       // Проверка, достиг ли пользователь верхней части чата
-      if (chatWindow && chatWindow.scrollTop === 0 && !loadingRef.current && hasMoreMessages) {
+      if (chatWindow.scrollTop === 0 && !loadingRef.current && hasMoreMessages) {
         console.log('Пользователь достиг верхней части чата, подгружаем старые сообщения');
         loadMessages(false); // Загружаем старые сообщения
       }
@@ -239,6 +255,12 @@ function App() {
       }
     };
   }, [loadMessages, hasMoreMessages]);
+
+  // useEffect(() => {
+  //   if (!isAuthenticated) return;
+    
+  //   loadMessages(true); // Загружаем начальные сообщения один раз после авторизации
+  // }, [loadMessages, isAuthenticated]);  
   
   // useEffect(() => {
   //   loadMessages(true); // Загружаем начальные сообщения при монтировании компонента

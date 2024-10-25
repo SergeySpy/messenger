@@ -10,14 +10,24 @@ const CryptoJS = require('crypto-js');
 
 // Функция шифрования
 function encryptMessage(message, secretKey) {
+  console.log('Encrypting with key:', secretKey);
   return CryptoJS.AES.encrypt(message, secretKey).toString();
 }
 
 // Функция дешифрования
 function decryptMessage(ciphertext, secretKey) {
+  console.log('Decrypting with key:', secretKey);
   const bytes = CryptoJS.AES.decrypt(ciphertext, secretKey);
-  return bytes.toString(CryptoJS.enc.Utf8);
+  const decryptedMessage = bytes.toString(CryptoJS.enc.Utf8);
+  if (!decryptedMessage) {
+    console.error('Decryption failed: Result is empty.');
+  }
+  return decryptedMessage;
 }
+
+// module.exports = {
+//   decryptMessage,  // Экспортируем функцию, чтобы её можно было импортировать
+// };
 
 // Настройка базы данных (SQLite)
 (async () => {
@@ -120,10 +130,11 @@ app.get('/messages', async (req, res) => {
 
   try {
     const rows = await db.all("SELECT user, message, timestamp FROM messages ORDER BY id DESC LIMIT ? OFFSET ?", [limit, offset]);
-    console.log('Загруженные сообщения:', rows.length); // Логируем количество загруженных сообщений
-    res.json({ messages: rows });
-  } catch (err) {
-    console.error('Error fetching messages:', err);
+    
+    console.log('Загруженные сообщения:', rows.length);
+    res.json({ messages: rows });  // Отправляем сообщения напрямую, без расшифровки
+    } catch (err) {
+    console.error('Error fetching messages:', err.message);
     res.status(500).send('Error fetching messages');
   }
 });
@@ -142,6 +153,9 @@ wss.on('connection', (ws) => {
       const parsedData = JSON.parse(data); //Получаем обьект { user, message }
       const { user, message } = parsedData;
 
+      // **Расшифровка сообщения перед сохранением**
+      const decryptedMessage = decryptMessage(message, 'your-secret-key');
+
       // Получаем текущие дату и время
       const timestamp = new Date().toLocaleString('ru-RU', {
         day: '2-digit',
@@ -149,15 +163,16 @@ wss.on('connection', (ws) => {
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+        second: '2-digit',
       });
 
       console.log(`Received message: ${user}: ${message}`);
 
       // Сохраняем сообщение в базе данных с таймстампом
-      await db.run("INSERT INTO messages (user, message, timestamp) VALUES (?, ?, ?)", [user, message, timestamp]);
+      await db.run("INSERT INTO messages (user, message, timestamp) VALUES (?, ?, ?)", [user, decryptedMessage, timestamp]);
 
       // Шифруем сообщение перед отправкой клиентам
-      const encryptedMessage = encryptMessage(message, 'your-secret-key'); // Убедитесь, что используется реальный ключ
+      const encryptedMessage = encryptMessage(decryptedMessage, 'your-secret-key'); // Убедитесь, что используется реальный ключ
 
       // Отправляем новое сообщение всем подключенным клиентам
       wss.clients.forEach(client => {
